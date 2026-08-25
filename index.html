@@ -53,20 +53,32 @@
       // ============================================================================
       //  Basketball Hero - landscape WebGL template
       //
-      //  Layout model: the canvas is ALWAYS a 16:9 box, sized to the largest 16:9
-      //  rectangle that fits the viewport, and centred. Everything outside it is
-      //  letterbox. That guarantees the UI composition is identical on every device
-      //  and nothing is ever stretched or cropped.
+      //  Layout model, per device class:
       //
-      //  If you ever want the canvas to fill the whole window instead, set
-      //  LETTERBOX = false below.
+      //    Desktop - the canvas is a fixed 16:9 box, the largest that fits the
+      //              window, centred, with letterbox bars around it. The window is
+      //              an arbitrary shape there, so pinning the aspect keeps the
+      //              composition predictable.
+      //
+      //    Touch   - the canvas fills the viewport edge to edge. A phone held in
+      //              landscape is already roughly the right shape, and bars on a
+      //              small screen waste the little space there is. The aspect then
+      //              varies with the device (a 20:9 phone shows a wider view), so
+      //              the game's own camera and CanvasScaler have to tolerate that.
+      //
+      //  Both are switchable below.
       // ============================================================================
 
       // ---- Tunables ----------------------------------------------------------
-      var LETTERBOX   = true;     // false = fill the viewport, ignore GAME_ASPECT
-      var GAME_ASPECT = 16 / 9;   // landscape
+      var GAME_ASPECT = 16 / 9;   // landscape; only used where letterboxing is on
+      var LETTERBOX_ON_DESKTOP = true;   // false = fill the window on desktop too
+      var LETTERBOX_ON_TOUCH   = false;  // true  = bring the 16:9 bars back on phones
       var DPR_CAP     = 2;        // cap device pixel ratio; 3x on phones murders fps
       var SHOW_FULLSCREEN_BUTTON = false;  // flip to true to add a corner FS button
+      // Phones only: take the browser fullscreen on the first tap, which is what
+      // actually hides the URL bar and frees up the whole screen. Silently ignored
+      // where the browser refuses (iPhone Safari has no Element.requestFullscreen).
+      var FULLSCREEN_ON_TOUCH = true;
 
       var container = document.querySelector("#unity-container");
       var canvas    = document.querySelector("#unity-canvas");
@@ -124,16 +136,17 @@
 
         if (retryTimer !== null) { clearInterval(retryTimer); retryTimer = null; }
 
+        var letterbox = isTouch ? LETTERBOX_ON_TOUCH : LETTERBOX_ON_DESKTOP;
         var w, h;
 
-        if (LETTERBOX) {
+        if (letterbox) {
           if (v.w / v.h > GAME_ASPECT) {          // window wider than the game
             h = v.h; w = Math.round(h * GAME_ASPECT);
           } else {                                 // window taller than the game
             w = v.w; h = Math.round(w / GAME_ASPECT);
           }
         } else {
-          w = v.w; h = v.h;
+          w = v.w; h = v.h;                       // full bleed
         }
 
         canvas.style.width  = w + "px";
@@ -165,6 +178,10 @@
       if (window.ResizeObserver) new ResizeObserver(resize).observe(container);
       window.addEventListener("load",    resize);
       window.addEventListener("pageshow", resize);
+      // Entering or leaving fullscreen resizes the viewport without always firing a
+      // window resize first, which would otherwise leave the canvas the old size.
+      document.addEventListener("fullscreenchange", resize);
+      document.addEventListener("webkitfullscreenchange", resize);
       document.addEventListener("visibilitychange", function () {
         if (!document.hidden) resize();
       });
@@ -196,15 +213,26 @@
           if (so && so.lock) { var p = so.lock("landscape"); if (p && p.catch) p.catch(function(){}); }
         } catch (e) {}
       }
-      window.addEventListener("touchend", tryLockLandscape, { once: true });
-      window.addEventListener("click",    tryLockLandscape, { once: true });
-
       function goFullscreen() {
         var el = document.documentElement;
         var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
         if (fn) { try { var p = fn.call(el); if (p && p.catch) p.catch(function(){}); } catch (e) {} }
         tryLockLandscape();
       }
+
+      // Both of the above only work from inside a user gesture. On a phone go
+      // fullscreen as well - that is what drops the URL bar and gives the game the
+      // whole screen; the orientation lock also tends to be refused outside it.
+      function onFirstGesture() {
+        if (isTouch && FULLSCREEN_ON_TOUCH) goFullscreen();
+        else tryLockLandscape();
+        // The viewport changes shape as the browser chrome collapses, and phones
+        // report the new size a beat late.
+        setTimeout(resize, 100);
+        setTimeout(resize, 600);
+      }
+      window.addEventListener("touchend", onFirstGesture, { once: true });
+      window.addEventListener("click",    onFirstGesture, { once: true });
 
       // ---- Loading UI --------------------------------------------------------
       function setProgress(p) {
