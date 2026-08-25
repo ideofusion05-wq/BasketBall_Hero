@@ -235,20 +235,21 @@
 
       var config = {
         arguments: [],
-        dataUrl: buildUrl + "/build.data",
-        frameworkUrl: buildUrl + "/build.framework.js",
-        codeUrl: buildUrl + "/build.wasm",
-
-
+        dataUrl: buildUrl + "/build.data.unityweb",
+        frameworkUrl: buildUrl + "/build.framework.js.unityweb",
+        codeUrl: buildUrl + "/build.wasm.unityweb",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "ASN Games",
         productName: "BasketBall Hero",
-        productVersion: "2.5",
+        productVersion: "1.0",
         showBanner: unityShowBanner,
         // Render buffer follows the letterboxed CSS size -> no distortion, no
         // wasted pixels in the black bars.
         matchWebGLToCanvasSize: true,
-        devicePixelRatio: Math.min(window.devicePixelRatio || 1, DPR_CAP)
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, DPR_CAP),
+        // Opt in to automatic persistentDataPath syncing. Without this Unity logs a
+        // deprecation warning about manual JS_FileSystem_Sync() on every boot.
+        autoSyncPersistentDataPath: true
       };
 
       document.querySelector("#loading-bar").style.display = "block";

@@ -8,14 +8,13 @@ Unity WebGL build of BasketBall Hero, hosted via GitHub Pages.
 - **Template:** `BasketBallHeroLandscape` (lives in the Unity project under
   `Assets/WebGLTemplates/`).
 
-## Note on the build files
+## Build settings this deployment depends on
 
-`Build/` is served **uncompressed** (`.data`, `.wasm`, `.framework.js`).
+`Build/` is gzip-compressed (`.unityweb`) with **Decompression Fallback enabled**, so the
+payload decompresses in the browser and needs nothing from the server.
 
-GitHub Pages cannot send the `Content-Encoding: gzip` header that Unity's
-compressed `.gz` output requires, so a gzip-compressed build fails to load here
-with *"Unable to parse Build/build.framework.js.gz"*.
+Do not turn that setting off for this host. Without it Unity emits `.gz` files that require
+the server to send `Content-Encoding: gzip` — a header GitHub Pages does not send — and the
+build dies during load with *"Unable to parse Build/build.framework.js.gz"*.
 
-The smaller alternative is to rebuild in Unity with
-**Player Settings → Publishing Settings → Decompression Fallback** enabled,
-which produces self-decompressing `.unityweb` files (~19 MB instead of ~48 MB).
+Player Settings → Publishing Settings → Decompression Fallback.
