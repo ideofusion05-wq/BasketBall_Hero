@@ -50,6 +50,73 @@
     </div>
 
     <script>
+      // ===== Loading icon from GameBull ==========================================
+      // Takes customization.gameLogoUrl from /context and puts it on the loading
+      // screen, so the icon is whatever the platform has for this game and changing
+      // it there changes it here - no rebuild needed.
+      //
+      // Deliberately fire-and-forget: nothing below awaits it, so the Unity download
+      // is never held up by this request. TemplateData/game-icon.png stays as the
+      // fallback and is what shows if there is no token, no logo, or the request
+      // fails, so the loading screen is never empty.
+      (function loadPlatformIcon() {
+        var DEFAULT_API_BASE = "https://api.staging.g-b.store";
+        var FETCH_TIMEOUT_MS = 4000;
+
+        var logo = document.querySelector("#loading-logo");
+        if (!logo) return;
+
+        try {
+          var q = new URLSearchParams(window.location.search);
+
+          // Same precedence the C# side uses.
+          var token      = q.get("sessionToken") || q.get("bootToken") || q.get("token");
+          var tenantSlug = q.get("tenantSlug");
+          var gameId     = q.get("gameId");
+          var apiBase    = (q.get("apiBase") || DEFAULT_API_BASE).replace(/\/+$/, "");
+
+          // Not launched by the platform - keep the baked icon.
+          if (!token || !tenantSlug || !gameId) return;
+
+          // AbortController so a hung API cannot leave the icon in limbo.
+          var ctrl  = ("AbortController" in window) ? new AbortController() : null;
+          var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, FETCH_TIMEOUT_MS);
+
+          var url = apiBase + "/play/games/" + encodeURIComponent(gameId)
+                  + "/context?tenantSlug=" + encodeURIComponent(tenantSlug);
+
+          fetch(url, {
+            method: "GET",
+            headers: { "Authorization": "Bearer " + token },
+            signal: ctrl ? ctrl.signal : undefined
+          })
+            .then(function (r) { return r.ok ? r.json() : null; })   // 401/404 -> keep fallback
+            .then(function (data) {
+              clearTimeout(timer);
+
+              var c = data && data.customization;
+              // gameLogoUrl ONLY. The tenant-wide logoUrl and the custom asset list
+              // belong to the partner, not to this game, and using them here shows
+              // another game's artwork on a shared tenant.
+              var iconUrl = (c && typeof c.gameLogoUrl === "string" && c.gameLogoUrl)
+                          ? c.gameLogoUrl : null;
+              if (!iconUrl) return;
+
+              // Swap only once the image has decoded, so a slow or broken URL never
+              // blanks the icon that is already on screen.
+              var img = new Image();
+              img.crossOrigin = "anonymous";
+              img.onload = function () {
+                logo.style.backgroundImage = 'url("' + iconUrl.replace(/"/g, "%22") + '")';
+              };
+              img.src = iconUrl;
+            })
+            .catch(function () { clearTimeout(timer); });   // network / abort / CORS
+        } catch (e) {
+          /* URLSearchParams or fetch unavailable - the baked icon is already showing */
+        }
+      })();
+
       // ============================================================================
       //  Basketball Hero - landscape WebGL template
       //
