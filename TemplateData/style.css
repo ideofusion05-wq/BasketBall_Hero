@@ -47,9 +47,9 @@ body {
 
 /* ---------- Loading ---------- */
 
-/* The loading wallpaper. Ships with the build, and is replaced at runtime by the
-   partner's "background" custom asset when one is uploaded - so the screen is
-   never bare, with or without the platform.
+/* The loading wallpaper. Ships with the build and stays fixed - unlike the ball
+   and the court, it is not swappable from the GameBull console, so changing it
+   means a new build.
 
    `cover` because the image and the viewport will not share an aspect ratio -
    cropping the overflow beats letterboxing a wallpaper. Sits above the
@@ -66,8 +66,8 @@ body {
 }
 
 /* Darkened so the icon, the progress bar and the percentage stay legible over a
-   photograph. Applied as an overlay rather than baked into the image, so an
-   uploaded asset gets the same treatment automatically. */
+   photograph. An overlay rather than a baked-in gradient, so the source image
+   can be swapped in the project without re-editing it for contrast. */
 #loading-backdrop::after {
   content: "";
   position: absolute;

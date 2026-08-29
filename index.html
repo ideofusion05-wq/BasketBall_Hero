@@ -21,9 +21,9 @@
       <!-- Loading UI. Removed from the DOM once the instance is up: Safari keeps painting
            these over the game if they are only display:none'd on a parent. -->
 
-      <!-- Full-bleed loading wallpaper. Ships with the build (TemplateData/loading-background.jpg,
-           set in the stylesheet) and is swapped for the partner's "background" custom asset when
-           one is uploaded. -->
+      <!-- Full-bleed loading wallpaper, fixed for the life of the build
+           (TemplateData/loading-background.jpg, set in the stylesheet). Not partner-swappable
+           by design - changing it means a new build. -->
       <div id="loading-backdrop"></div>
 
       <div id="loading-bar">
@@ -56,12 +56,15 @@
     </div>
 
     <script>
-      // ===== Loading screen branding from GameBull ===============================
-      // One /context request drives two things on the loading screen, both owned by
-      // the partner and both changeable from the GameBull console without a rebuild:
+      // ===== Loading icon from GameBull ==========================================
+      // Takes customization.gameLogoUrl from /context and puts it on the loading
+      // screen, so the icon is whatever the platform has for this game and changing
+      // it there changes it here - no rebuild needed.
       //
-      //   customization.gameLogoUrl        -> the icon  (#loading-logo)
-      //   customization.assets[key="background"] -> the wallpaper (#loading-backdrop)
+      // The wallpaper behind it is deliberately NOT platform-driven: it ships with
+      // the build (TemplateData/loading-background.jpg, set in the stylesheet) and
+      // stays fixed. Only the ball and the court are partner-swappable, and both of
+      // those are handled inside Unity by GameBullPartnerAssets.
       //
       // This lives in the template rather than in C# because the loading screen is
       // pure HTML that exists long before the Unity instance does - by the time a
@@ -69,39 +72,23 @@
       //
       // Deliberately fire-and-forget: nothing below awaits it, so the Unity download
       // is never held up by this request. TemplateData/game-icon.png stays as the
-      // icon fallback and the flat #0b0d12 shell as the wallpaper fallback, so a
-      // missing token, a missing asset or a failed request just means "no change"
-      // rather than an empty screen.
-      (function loadPlatformBranding() {
-        var DEFAULT_API_BASE = "https://api.g-b.store";
+      // fallback, so a missing token, a missing logo or a failed request just means
+      // "no change" rather than an empty screen.
+      (function loadPlatformIcon() {
+        var DEFAULT_API_BASE = "https://api.staging.g-b.store";
         var FETCH_TIMEOUT_MS = 4000;
 
-        // Keyword the partner uploads the loading wallpaper under, in the console's
-        // custom-asset list. Must match GameBullPartnerAssets.BackgroundKey on the
-        // C# side, which is where the same list is read for the ball texture.
-        var BACKGROUND_KEY = "background";
+        var logo = document.querySelector("#loading-logo");
+        if (!logo) return;
 
-        var logo     = document.querySelector("#loading-logo");
-        var backdrop = document.querySelector("#loading-backdrop");
-        if (!logo && !backdrop) return;
-
-        // Swap in an image only after it has decoded, so a slow or broken URL never
-        // blanks what is already on screen. No crossOrigin: these end up as CSS
-        // backgrounds, never read back from a canvas, and requesting CORS would turn
+        // Swap in the icon only after it has decoded, so a slow or broken URL never
+        // blanks what is already on screen. No crossOrigin: this ends up as a CSS
+        // background, never read back from a canvas, and requesting CORS would turn
         // a CDN that omits the headers into an onerror - i.e. no swap at all.
         function applyWhenDecoded(url, onReady) {
           var img = new Image();
           img.onload = function () { onReady(url.replace(/"/g, "%22")); };
           img.src = url;
-        }
-
-        function findAsset(list, key) {
-          if (!list || !list.length) return null;
-          for (var i = 0; i < list.length; i++) {
-            var a = list[i];
-            if (a && a.key === key && typeof a.url === "string" && a.url) return a.url;
-          }
-          return null;
         }
 
         try {
@@ -137,27 +124,16 @@
 
               // gameLogoUrl, never the tenant-wide logoUrl: on a shared tenant the
               // latter is the partner's own brand mark, not this game's icon.
+              // customization.assets is deliberately ignored here - the only two
+              // custom assets this game honours, "ball" and "court", are read on the
+              // C# side by GameBullPartnerAssets.
               var iconUrl = (typeof c.gameLogoUrl === "string" && c.gameLogoUrl)
                           ? c.gameLogoUrl : null;
-              if (iconUrl && logo) {
-                applyWhenDecoded(iconUrl, function (safe) {
-                  logo.style.backgroundImage = 'url("' + safe + '")';
-                });
-              }
+              if (!iconUrl) return;
 
-              // Replaces the wallpaper baked into TemplateData. Only ever swapped
-              // after the replacement has decoded, so the built-in one stays up
-              // rather than flashing to empty on a slow or broken URL.
-              var bgUrl = findAsset(c.assets, BACKGROUND_KEY);
-              if (bgUrl && backdrop) {
-                applyWhenDecoded(bgUrl, function (safe) {
-                  // The element may already have been torn down if Unity finished
-                  // booting before this request came back - that is the normal
-                  // fast-connection case, not an error.
-                  if (!backdrop.parentNode) return;
-                  backdrop.style.backgroundImage = 'url("' + safe + '")';
-                });
-              }
+              applyWhenDecoded(iconUrl, function (safe) {
+                logo.style.backgroundImage = 'url("' + safe + '")';
+              });
             })
             .catch(function () { clearTimeout(timer); });   // network / abort / CORS
         } catch (e) {
