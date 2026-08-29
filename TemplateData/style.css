@@ -46,6 +46,35 @@ body {
 }
 
 /* ---------- Loading ---------- */
+
+/* The loading wallpaper. Ships with the build, and is replaced at runtime by the
+   partner's "background" custom asset when one is uploaded - so the screen is
+   never bare, with or without the platform.
+
+   `cover` because the image and the viewport will not share an aspect ratio -
+   cropping the overflow beats letterboxing a wallpaper. Sits above the
+   container's flat dark but below #loading-bar (z-index 10). */
+#loading-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background-image: url("loading-background.jpg");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+/* Darkened so the icon, the progress bar and the percentage stay legible over a
+   photograph. Applied as an overlay rather than baked into the image, so an
+   uploaded asset gets the same treatment automatically. */
+#loading-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(11, 13, 18, 0.55), rgba(11, 13, 18, 0.72));
+}
+
 #loading-bar {
   position: absolute;
   left: 50%;

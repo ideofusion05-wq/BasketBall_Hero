@@ -20,6 +20,12 @@
 
       <!-- Loading UI. Removed from the DOM once the instance is up: Safari keeps painting
            these over the game if they are only display:none'd on a parent. -->
+
+      <!-- Full-bleed loading wallpaper. Ships with the build (TemplateData/loading-background.jpg,
+           set in the stylesheet) and is swapped for the partner's "background" custom asset when
+           one is uploaded. -->
+      <div id="loading-backdrop"></div>
+
       <div id="loading-bar">
         <div id="loading-logo"></div>
         <div id="loading-track"><div id="loading-fill"></div></div>
@@ -50,21 +56,53 @@
     </div>
 
     <script>
-      // ===== Loading icon from GameBull ==========================================
-      // Takes customization.gameLogoUrl from /context and puts it on the loading
-      // screen, so the icon is whatever the platform has for this game and changing
-      // it there changes it here - no rebuild needed.
+      // ===== Loading screen branding from GameBull ===============================
+      // One /context request drives two things on the loading screen, both owned by
+      // the partner and both changeable from the GameBull console without a rebuild:
+      //
+      //   customization.gameLogoUrl        -> the icon  (#loading-logo)
+      //   customization.assets[key="background"] -> the wallpaper (#loading-backdrop)
+      //
+      // This lives in the template rather than in C# because the loading screen is
+      // pure HTML that exists long before the Unity instance does - by the time a
+      // script inside the build could run, the thing it would style is gone.
       //
       // Deliberately fire-and-forget: nothing below awaits it, so the Unity download
       // is never held up by this request. TemplateData/game-icon.png stays as the
-      // fallback and is what shows if there is no token, no logo, or the request
-      // fails, so the loading screen is never empty.
-      (function loadPlatformIcon() {
+      // icon fallback and the flat #0b0d12 shell as the wallpaper fallback, so a
+      // missing token, a missing asset or a failed request just means "no change"
+      // rather than an empty screen.
+      (function loadPlatformBranding() {
         var DEFAULT_API_BASE = "https://api.g-b.store";
         var FETCH_TIMEOUT_MS = 4000;
 
-        var logo = document.querySelector("#loading-logo");
-        if (!logo) return;
+        // Keyword the partner uploads the loading wallpaper under, in the console's
+        // custom-asset list. Must match GameBullPartnerAssets.BackgroundKey on the
+        // C# side, which is where the same list is read for the ball texture.
+        var BACKGROUND_KEY = "background";
+
+        var logo     = document.querySelector("#loading-logo");
+        var backdrop = document.querySelector("#loading-backdrop");
+        if (!logo && !backdrop) return;
+
+        // Swap in an image only after it has decoded, so a slow or broken URL never
+        // blanks what is already on screen. No crossOrigin: these end up as CSS
+        // backgrounds, never read back from a canvas, and requesting CORS would turn
+        // a CDN that omits the headers into an onerror - i.e. no swap at all.
+        function applyWhenDecoded(url, onReady) {
+          var img = new Image();
+          img.onload = function () { onReady(url.replace(/"/g, "%22")); };
+          img.src = url;
+        }
+
+        function findAsset(list, key) {
+          if (!list || !list.length) return null;
+          for (var i = 0; i < list.length; i++) {
+            var a = list[i];
+            if (a && a.key === key && typeof a.url === "string" && a.url) return a.url;
+          }
+          return null;
+        }
 
         try {
           var q = new URLSearchParams(window.location.search);
@@ -95,21 +133,31 @@
               clearTimeout(timer);
 
               var c = data && data.customization;
-              // gameLogoUrl ONLY. The tenant-wide logoUrl and the custom asset list
-              // belong to the partner, not to this game, and using them here shows
-              // another game's artwork on a shared tenant.
-              var iconUrl = (c && typeof c.gameLogoUrl === "string" && c.gameLogoUrl)
-                          ? c.gameLogoUrl : null;
-              if (!iconUrl) return;
+              if (!c) return;
 
-              // Swap only once the image has decoded, so a slow or broken URL never
-              // blanks the icon that is already on screen.
-              var img = new Image();
-              img.crossOrigin = "anonymous";
-              img.onload = function () {
-                logo.style.backgroundImage = 'url("' + iconUrl.replace(/"/g, "%22") + '")';
-              };
-              img.src = iconUrl;
+              // gameLogoUrl, never the tenant-wide logoUrl: on a shared tenant the
+              // latter is the partner's own brand mark, not this game's icon.
+              var iconUrl = (typeof c.gameLogoUrl === "string" && c.gameLogoUrl)
+                          ? c.gameLogoUrl : null;
+              if (iconUrl && logo) {
+                applyWhenDecoded(iconUrl, function (safe) {
+                  logo.style.backgroundImage = 'url("' + safe + '")';
+                });
+              }
+
+              // Replaces the wallpaper baked into TemplateData. Only ever swapped
+              // after the replacement has decoded, so the built-in one stays up
+              // rather than flashing to empty on a slow or broken URL.
+              var bgUrl = findAsset(c.assets, BACKGROUND_KEY);
+              if (bgUrl && backdrop) {
+                applyWhenDecoded(bgUrl, function (safe) {
+                  // The element may already have been torn down if Unity finished
+                  // booting before this request came back - that is the normal
+                  // fast-connection case, not an error.
+                  if (!backdrop.parentNode) return;
+                  backdrop.style.backgroundImage = 'url("' + safe + '")';
+                });
+              }
             })
             .catch(function () { clearTimeout(timer); });   // network / abort / CORS
         } catch (e) {
@@ -358,7 +406,8 @@
           setProgress(1);   // Unity's own progress plateaus around 0.9
 
           // Remove, don't just hide - WebKit keeps compositing hidden children.
-          ["#loading-logo", "#loading-track", "#loading-fill", "#loading-percent", "#loading-bar"]
+          ["#loading-logo", "#loading-track", "#loading-fill", "#loading-percent",
+           "#loading-bar", "#loading-backdrop"]
             .forEach(function (sel) {
               var el = document.querySelector(sel);
               if (el && el.parentNode) el.parentNode.removeChild(el);
